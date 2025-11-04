@@ -19,6 +19,8 @@ from neural_network.configs.default_config import (
     DATA_CONFIG,
     EXPORT_CONFIG,
 )
+from data.windowed_dataset import WindowedAudioDataset
+from config import WINDOW_SIZE_INPUT, WINDOW_SIZE_OUTPUT
 
 
 def parse_args():
@@ -96,6 +98,39 @@ def parse_args():
     return parser.parse_args()
 
 
+def create_dataloaders(args):
+    """Create data loaders for training and validation."""
+    # Create base datasets
+    train_dataset, val_dataset = create_data_loaders(
+        train_input_dir=args.train_input,
+        train_target_dir=args.train_target,
+        val_input_dir=args.val_input,
+        val_target_dir=args.val_target,
+        batch_size=args.batch_size,
+        sequence_length=TRAINING_CONFIG["sequence_length"],
+        sample_rate=TRAINING_CONFIG["sample_rate"],
+        num_workers=DATA_CONFIG["num_workers"],
+    )
+    
+    # Wrap with windowed dataset if window sizes are configured
+    if WINDOW_SIZE_INPUT > 0 or WINDOW_SIZE_OUTPUT > 0:
+        train_dataset = WindowedAudioDataset(
+            train_dataset,
+            window_size_input=WINDOW_SIZE_INPUT,
+            window_size_output=WINDOW_SIZE_OUTPUT
+        )
+        val_dataset = WindowedAudioDataset(
+            val_dataset,
+            window_size_input=WINDOW_SIZE_INPUT,
+            window_size_output=WINDOW_SIZE_OUTPUT
+        )
+        
+        print(f"Using sliding window: input_history={WINDOW_SIZE_INPUT}, output_history={WINDOW_SIZE_OUTPUT}")
+        print(f"Total input dimension: {train_dataset.get_input_dim()}")
+    
+    return train_dataset, val_dataset
+
+
 def main():
     """Main training function."""
     args = parse_args()
@@ -113,16 +148,7 @@ def main():
     print("Loading Data")
     print("=" * 70)
     
-    train_loader, val_loader = create_data_loaders(
-        train_input_dir=args.train_input,
-        train_target_dir=args.train_target,
-        val_input_dir=args.val_input,
-        val_target_dir=args.val_target,
-        batch_size=args.batch_size,
-        sequence_length=TRAINING_CONFIG["sequence_length"],
-        sample_rate=TRAINING_CONFIG["sample_rate"],
-        num_workers=DATA_CONFIG["num_workers"],
-    )
+    train_loader, val_loader = create_dataloaders(args)
     
     print(f"Training samples: {len(train_loader.dataset)}")
     if val_loader:
